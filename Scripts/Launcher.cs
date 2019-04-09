@@ -24,6 +24,9 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
 
     [SerializeField]
     GameObject Seats;
+
+    [SerializeField]
+    Button WarButton;
     void Start()
     {
         var userid = PlayerPrefs.GetString("userid");
@@ -33,6 +36,7 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         UpdateUserInfoText();
         PhotonNetwork.ConnectUsingSettings();
 
+        WarButton.gameObject.SetActive(false);
         //  PhotonNetwork.JoinLobby("casinowarlobby", new TypedLobby { });
     }
 
@@ -41,9 +45,9 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         CasinoWarPlayer player = PlayerSingleton.GetPlayer();
         UserInfoText.text = "User ID: " + player.getID() +
             "\nUser Name: " + player.getUserName() +
-            "\nCredit: " + player.getNewCredit() ;
+            "\nCredit: " + player.getNewCredit();
     }
-    
+
     public override void OnConnected()
     {
         base.OnConnected();
@@ -55,18 +59,13 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
     {
         base.OnJoinedRoom();
         Seats.SetActive(true);
-        for (int i = 1; i <= 5; i++)
-        {
-            Button button = Seats.transform.GetChild(i).gameObject.GetComponent<Button>();
-            int localIndex = i;
-            button.onClick.AddListener(() => { ChangeSeatOnClick(localIndex); });
-        }
-        PhotonNetwork.SetPlayerCustomProperties(new Hashtable() { { "bet", 0 } });
-        PhotonNetwork.SetPlayerCustomProperties(new Hashtable() { { "credit", PlayerSingleton.GetPlayer().getNewCredit()} });
-        foreach (Player player in PhotonNetwork.PlayerListOthers)
-        {
-            UpdatePlayerGui(player);
-        }
+
+        PhotonNetwork.SetPlayerCustomProperties(new Hashtable() { { "bet", 0 }, {"war", 0 } });
+        PhotonNetwork.SetPlayerCustomProperties(new Hashtable() { { "credit", PlayerSingleton.GetPlayer().getNewCredit() } });
+        // foreach (Player player in PhotonNetwork.PlayerListOthers)
+        // {
+        //     UpdatePlayerGui(player);
+        // }
     }
 
 
@@ -84,7 +83,7 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         base.OnJoinRoomFailed(returnCode, message);
         Debug.Log("OnJoinRommFailed " + message);
     }
-   
+
     public override void OnConnectedToMaster()
     {
         base.OnConnectedToMaster();
@@ -99,44 +98,53 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         Debug.Log("joinrandom failed " + message);
 
 
-        PhotonNetwork.CreateRoom(null, new RoomOptions {PublishUserId = true, PlayerTtl = 0, MaxPlayers = 5, Plugins = new string[] { "CasinoWarMultiplePlugin" } });
+        PhotonNetwork.CreateRoom(null, new RoomOptions { PublishUserId = true, PlayerTtl = 0, MaxPlayers = 5, Plugins = new string[] { "CasinoWarMultiplePlugin" } });
         //, Plugins = new string[] { "CustomPlugin" }
     }
 
     public override void OnRoomPropertiesUpdate(Hashtable propertiesThatChanged)
     {
         base.OnRoomPropertiesUpdate(propertiesThatChanged);
-        if(propertiesThatChanged.ContainsKey("timer"))
+        if (propertiesThatChanged.ContainsKey("timer"))
             this.InfoText.text = PhotonNetwork.CurrentRoom.CustomProperties["timer"].ToString();
         if (propertiesThatChanged.ContainsKey("phase"))
         {
             //leave when didn't bet on times
-            if((int)propertiesThatChanged["phase"] == 2)
+            if ((int)propertiesThatChanged["phase"] == 2)
             {
                 PhaseText.color = Color.yellow;
-            }else if((int)propertiesThatChanged["phase"] == 0)
+            }
+            else if ((int)propertiesThatChanged["phase"] == 0)
             {
+                WarButton.gameObject.SetActive(false);
                 PhaseText.color = Color.white;
                 ResetAllResults();
                 DealerCardText.text = "";
-            }else if ((int)propertiesThatChanged["phase"] == 1)
+            }
+            else if ((int)propertiesThatChanged["phase"] == 1)
             {
                 PhaseText.color = Color.red;
             }
+            else if ((int)propertiesThatChanged["phase"] == 3)
+            {
+                PhaseText.color = Color.red;
+            }
+
             if ((int)propertiesThatChanged["phase"] == 2 && (int)PhotonNetwork.LocalPlayer.CustomProperties["bet"] == 0)
             {
                 //kicked by server
             }
-            this.PhaseText.text = "Phase" + PhotonNetwork.CurrentRoom.CustomProperties["phase"].ToString();
+            this.PhaseText.text = "Phase " + PhotonNetwork.CurrentRoom.CustomProperties["phase"].ToString();
         }
         if (propertiesThatChanged.ContainsKey("resultTable"))
         {
             Hashtable resultTable = (Hashtable)propertiesThatChanged["resultTable"];
-            
+
+            Debug.Log(resultTable.Keys.Count);
             CasinoWarCardImpl card = JsonUtility.FromJson<CasinoWarCardImpl>(resultTable["dealercard"].ToString());
             DealerCardText.text = "Dealer's Card: " + card.ToString();
 
-            foreach(Player player in PhotonNetwork.PlayerList)
+            foreach (Player player in PhotonNetwork.PlayerList)
             {
                 if (resultTable.ContainsKey(player.ActorNumber))
                 {
@@ -145,8 +153,57 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
                 }
             }
         }
-        //   this.InfoText.text = propertiesThatChanged["timer"].ToString();
+        if (propertiesThatChanged.ContainsKey("WarTable"))
+        {
+            Hashtable WarTable = (Hashtable)propertiesThatChanged["WarTable"];
+
+            CasinoWarCardImpl card = JsonUtility.FromJson<CasinoWarCardImpl>(WarTable["dealercard"].ToString());
+            DealerCardText.text = "Dealer's Card: " + card.ToString();
+
+            foreach (Player player in PhotonNetwork.PlayerList)
+            {
+                if (WarTable.ContainsKey(player.ActorNumber))
+                {
+                    CasinoWarPlayer casinoPlayer = JsonUtility.FromJson<CasinoWarPlayer>(WarTable[player.ActorNumber].ToString());
+                    UpdateResultGui(casinoPlayer);
+                }
+                else
+                {
+                    ResetResult(ComputeSlot((int)player.CustomProperties["seat"]));
+                }
+            }
+        }
     }
+
+
+    public override void OnPlayerPropertiesUpdate(Player target, Hashtable changedProps)
+    {
+        base.OnPlayerPropertiesUpdate(target, changedProps);
+        if (target.ActorNumber == PhotonNetwork.LocalPlayer.ActorNumber && changedProps.ContainsKey("seat") && (int)changedProps["seat"] != 0)
+        {
+            foreach (Player player in PhotonNetwork.PlayerList)
+            {
+                UpdatePlayerGui(player);
+            }
+            for (int i = 1; i <= 5; i++)
+            {
+                Button button = Seats.transform.GetChild(ComputeSlot(i)).gameObject.GetComponent<Button>();
+                button.onClick.RemoveAllListeners();
+                int localIndex = i;
+                button.onClick.AddListener(() => { ChangeSeatOnClick(localIndex); });
+            }
+        }
+        else if (PhotonNetwork.LocalPlayer.CustomProperties.ContainsKey("seat") && (int)PhotonNetwork.LocalPlayer.CustomProperties["seat"] != 0)
+        {
+            UpdatePlayerGui(target);
+        }
+        else
+        {
+
+
+        }
+    }
+
 
     public void JoinOnClick()
     {
@@ -161,9 +218,9 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
     public void ChangeSeatOnClick(int seat)
     {
         Hashtable ht = new Hashtable();
-        
+
         int oldseat = FindSeatByActor(PhotonNetwork.LocalPlayer.ActorNumber);
-        if(oldseat == 0)
+        if (oldseat == 0)
         {
             return;
         }
@@ -179,7 +236,7 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
     int FindSeatByActor(int actorNumber)
     {
         Hashtable table = (Hashtable)PhotonNetwork.CurrentRoom.CustomProperties["table"];
-        if(table == null)
+        if (table == null)
         {
             return 100;
         }
@@ -195,9 +252,9 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
 
     public void ResetAllSeats()
     {
-        for(int i = 1; i<=5; i++)
+        for (int i = 1; i <= 5; i++)
         {
-            ResetSeat(i);
+            ResetSlot(i);
         }
     }
     public void ResetAllResults()
@@ -208,9 +265,9 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         }
     }
 
-    public void ResetSeat(int seat)
+    public void ResetSlot(int slot)
     {
-        Text actorField = Seats.transform.GetChild(seat).GetChild(0).gameObject.GetComponent<Text>();
+        Text actorField = Seats.transform.GetChild(slot).GetChild(0).gameObject.GetComponent<Text>();
         actorField.text = "Empty";
     }
 
@@ -233,19 +290,13 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         UpdatePlayerGui(otherPlayer);
         base.OnPlayerLeftRoom(otherPlayer);
     }
-    public override void OnPlayerPropertiesUpdate(Player target, Hashtable changedProps)
-    {
-        UpdatePlayerGui(target);
-        base.OnPlayerPropertiesUpdate(target, changedProps);
-    }
-
     public void ReJoinClick()
     {
         PhotonNetwork.Reconnect();
     }
     public void DoBet()
     {
-        if ((int)PhotonNetwork.LocalPlayer.CustomProperties["bet"] != 0 || (int)PhotonNetwork.CurrentRoom.CustomProperties["phase"] == 2)
+        if ((int)PhotonNetwork.LocalPlayer.CustomProperties["bet"] != 0 || (int)PhotonNetwork.CurrentRoom.CustomProperties["phase"] == 2 || (int)PhotonNetwork.CurrentRoom.CustomProperties["phase"] == 4)
             return;
         byte evCode = 66;
 
@@ -263,6 +314,14 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         PhotonNetwork.RaiseEvent(evCode, playerString, raiseEventOptions, sendOptions);
     }
 
+    public void DoWar()
+    {
+        PhotonNetwork.SetPlayerCustomProperties(new Hashtable() { { "war", 1 } });
+        RaiseEventOptions raiseEventOptions = new RaiseEventOptions { Receivers = ReceiverGroup.All }; // You would have to set the Receivers to All in order to receive this event on the local client as well
+        SendOptions sendOptions = new SendOptions { Reliability = true };
+        PhotonNetwork.RaiseEvent(67, PhotonNetwork.LocalPlayer.ActorNumber, raiseEventOptions, sendOptions);
+    }
+
     //[PunRPC]
     void UpdatePlayerGui(Player player)
     {
@@ -276,17 +335,32 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         {
             if ((int)table[seat] == 0)
             {
-                ResetSeat(seat);
+                ResetSlot(ComputeSlot(seat));
                 continue;
-            } else if ((int)table[seat] == player.ActorNumber)
+            }
+            else if ((int)table[seat] == player.ActorNumber)
             {
-                actorField = Seats.transform.GetChild(seat).GetChild(0).gameObject.GetComponent<Text>();
+                actorField = Seats.transform.GetChild(ComputeSlot(seat)).GetChild(0).gameObject.GetComponent<Text>();
                 actorField.text = "Actor Number: " + player.ActorNumber +
                     "\nSeat: " + seat +
                     "\nBet: " + player.CustomProperties["bet"].ToString() +
                     "\nCredit: " + player.CustomProperties["credit"].ToString();
             }
         }
+    }
+
+    int ComputeSlot(int seat)
+    {
+        int slot = seat - (int)PhotonNetwork.LocalPlayer.CustomProperties["seat"] + 3;
+        if (slot > 5)
+        {
+            slot -= 5;
+        }
+        else if (slot < 1)
+        {
+            slot += 5;
+        }
+        return slot;
     }
 
     void UpdateResultGui(CasinoWarPlayer player)
@@ -297,29 +371,26 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         {
             if ((int)table[seat] == player.getActorID())
             {
-                actorField = Seats.transform.GetChild(seat).GetChild(1).gameObject.GetComponent<Text>();
-                actorField.text = "Card: " + player.getMycard().ToString() + 
+                actorField = Seats.transform.GetChild(ComputeSlot(seat)).GetChild(1).gameObject.GetComponent<Text>();
+                actorField.text = "Card: " + player.getMycard().ToString() +
                     "\nWin Result: " + player.getResult();
             }
         }
-        if(player.getActorID() == PhotonNetwork.LocalPlayer.ActorNumber)
+        if (player.getActorID() == PhotonNetwork.LocalPlayer.ActorNumber)
         {
-            PhotonNetwork.SetPlayerCustomProperties(new Hashtable() { { "credit", player.getNewCredit() } });
-            PlayerSingleton.GetPlayer().setCredit(player.getNewCredit());
-            UpdateUserInfoText();
-            UpdatePlayerGui(PhotonNetwork.LocalPlayer);
+                if(player.getResult() == 2)
+            {
+
+                WarButton.gameObject.SetActive(true);
+            }
+                PlayerSingleton.GetPlayer().setCredit(player.getNewCredit());
+                PhotonNetwork.SetPlayerCustomProperties(new Hashtable() { { "credit", player.getNewCredit() } });
+                UpdateUserInfoText();
+               // UpdatePlayerGui(PhotonNetwork.LocalPlayer);
         }
     }
-
-    //void ResetPlayerGui(Player player)
-    //{
-
-    //    int seat = (int)player.CustomProperties["seat"];
-
-    //    Text actorField = Seats.transform.GetChild(seat).gameObject.GetComponent<Text>();
-
-    //    actorField.text = "Empty";
-    //}
+    
+    
 
     void ReloadEmptySeats()
     {
@@ -352,14 +423,8 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
         {
             //Hashtable ht = (Hashtable)photonEvent.CustomData;
             //Card c = (Card)ht["card1"];
-            Hashtable json = (Hashtable)photonEvent.CustomData;
 
-
-            JsonUtility.ToJson(new Hashtable());
-            CasinoWarCardImpl card1 = JsonUtility.FromJson<CasinoWarCardImpl>((string)json["playercard"]);
-            CasinoWarCardImpl card2 = JsonUtility.FromJson<CasinoWarCardImpl>((string)json["dealercard"]);
-
-
+            Debug.Log("Recieved" + ((string)photonEvent.CustomData));
             //  Debug.Log("player: "+card1.ToString() + " dealer: " + card2.ToString() + " credit: "+ json["credit"]);
         }
         else if (eventCode == 16)
