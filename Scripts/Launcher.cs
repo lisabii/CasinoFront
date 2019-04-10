@@ -385,6 +385,7 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
             }
                 PlayerSingleton.GetPlayer().setCredit(player.getNewCredit());
                 PhotonNetwork.SetPlayerCustomProperties(new Hashtable() { { "credit", player.getNewCredit() } });
+                UpdatePlayerGui(PhotonNetwork.LocalPlayer);
                 UpdateUserInfoText();
                // UpdatePlayerGui(PhotonNetwork.LocalPlayer);
         }
