@@ -31,7 +31,7 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
     {
         var userid = PlayerPrefs.GetString("userid");
         PhotonNetwork.AuthValues = new AuthenticationValues(userid);
-        PhotonNetwork.LocalPlayer.NickName = userid;
+        PhotonNetwork.LocalPlayer.NickName = PlayerSingleton.GetPlayer().getUserName();
 
         UpdateUserInfoText();
         PhotonNetwork.ConnectUsingSettings();
@@ -341,7 +341,7 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
             else if ((int)table[seat] == player.ActorNumber)
             {
                 actorField = Seats.transform.GetChild(ComputeSlot(seat)).GetChild(0).gameObject.GetComponent<Text>();
-                actorField.text = "Actor Number: " + player.ActorNumber +
+                actorField.text = "Name: " + player.NickName +
                     "\nSeat: " + seat +
                     "\nBet: " + player.CustomProperties["bet"].ToString() +
                     "\nCredit: " + player.CustomProperties["credit"].ToString();
