@@ -116,7 +116,6 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
             }
             else if ((int)propertiesThatChanged["phase"] == 0)
             {
-                WarButton.gameObject.SetActive(false);
                 PhaseText.color = Color.white;
                 ResetAllResults();
                 DealerCardText.text = "";
@@ -128,6 +127,11 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
             else if ((int)propertiesThatChanged["phase"] == 3)
             {
                 PhaseText.color = Color.red;
+            }
+            else if ((int)propertiesThatChanged["phase"] == 4)
+            {
+                WarButton.gameObject.SetActive(false);
+                PhaseText.color = Color.green;
             }
 
             if ((int)propertiesThatChanged["phase"] == 2 && (int)PhotonNetwork.LocalPlayer.CustomProperties["bet"] == 0)
@@ -385,6 +389,7 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
             }
                 PlayerSingleton.GetPlayer().setCredit(player.getNewCredit());
                 PhotonNetwork.SetPlayerCustomProperties(new Hashtable() { { "credit", player.getNewCredit() } });
+                UpdatePlayerGui(PhotonNetwork.LocalPlayer);
                 UpdateUserInfoText();
                // UpdatePlayerGui(PhotonNetwork.LocalPlayer);
         }
