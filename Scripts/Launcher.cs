@@ -116,6 +116,7 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
             }
             else if ((int)propertiesThatChanged["phase"] == 0)
             {
+                WarButton.gameObject.SetActive(false);
                 PhaseText.color = Color.white;
                 ResetAllResults();
                 DealerCardText.text = "";
