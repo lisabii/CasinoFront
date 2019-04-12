@@ -129,6 +129,11 @@ public class Launcher : MonoBehaviourPunCallbacks, IOnEventCallback
             {
                 PhaseText.color = Color.red;
             }
+            else if ((int)propertiesThatChanged["phase"] == 4)
+            {
+                WarButton.gameObject.SetActive(false);
+                PhaseText.color = Color.green;
+            }
 
             if ((int)propertiesThatChanged["phase"] == 2 && (int)PhotonNetwork.LocalPlayer.CustomProperties["bet"] == 0)
             {
